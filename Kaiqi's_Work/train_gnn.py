@@ -10,14 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 
 def load_matlab_dataset(file_path):
-    print(f"Loading dataset from {file_path}")
     mat_data = sio.loadmat(file_path)
-    print("Dataset keys:", mat_data.keys())
-    
-    for key in mat_data.keys():
-        if not key.startswith('__'):
-            print(f"Key: {key}, Shape: {mat_data[key].shape if hasattr(mat_data[key], 'shape') else 'N/A'}")
-    
     return mat_data
 
 def process_data(mat_data):
@@ -32,12 +25,8 @@ def process_data(mat_data):
     num_locations = Y_tr.shape[0]
     num_features = len(features_info)
     
-    print(f"Processing training data: {num_locations} locations, {X_tr.shape[0]} samples, {num_features} features")
-    
     unique_location_ids = np.unique(location_ids_raw)
     id_to_index = {int(id): idx for idx, id in enumerate(unique_location_ids)}
-    
-    print(f"Mapping {len(unique_location_ids)} unique location IDs to indices 0-{len(unique_location_ids)-1}")
     
     for i in range(num_locations):
         try:
@@ -89,15 +78,11 @@ def process_data(mat_data):
             graph_list.append(data)
             
         except Exception as e:
-            print(f"Error processing location {i}: {e}")
-    
-    print(f"Created {len(graph_list)} graphs from the dataset")
-    print(f"Mapped Location IDs: {sorted(location_ids)}")
+            pass
     
     max_id = max(location_ids)
     for i in range(max_id + 1):
         if i not in location_ids:
-            print(f"Creating dummy graph for missing location ID {i}")
             x = torch.randn(10, num_features + 2)
             edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 0],
                                        [1, 0, 2, 1, 3, 2, 4, 3, 0, 4]], dtype=torch.long)
@@ -107,7 +92,6 @@ def process_data(mat_data):
             location_ids.append(i)
     
     if not graph_list:
-        print("No valid graphs created. Using dummy data instead for demonstration")
         x = torch.randn(10, num_features + 2)
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 0],
                                    [1, 0, 2, 1, 3, 2, 4, 3, 0, 4]], dtype=torch.long)
@@ -238,14 +222,11 @@ def main():
     test_graphs = [graph_list[i] for i in test_indices]
     
     all_test_location_ids = [int(data.location_id) for data in test_graphs]
-    print(f"Test location IDs: {sorted(all_test_location_ids)}")
     
     all_location_ids = set(range(num_locations))
     missing_ids = all_location_ids - set(all_test_location_ids)
     
     if missing_ids:
-        print(f"Adding {len(missing_ids)} missing location IDs to test set: {missing_ids}")
-        all_train_location_ids = [int(data.location_id) for data in train_graphs]
         for location_id in missing_ids:
             for idx, graph in enumerate(train_graphs):
                 if int(graph.location_id) == location_id:
@@ -262,7 +243,6 @@ def main():
     output_dim = 1
     
     model = ImprovedGNN(input_dim, hidden_dim, output_dim, num_layers=4).to(device)
-    print(model)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
     criterion = nn.MSELoss()
@@ -298,39 +278,9 @@ def main():
         model.load_state_dict(best_model_state)
         print(f"Loaded best model with test loss: {best_loss:.6f}")
     
-    plt.figure(figsize=(12, 6))
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(test_losses, label='Test Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Test Loss')
-    plt.legend()
-    plt.yscale('log')
-    plt.grid(True)
-    plt.savefig('loss_curve.png')
-    plt.close()
-    
     print("Training complete. Model evaluation:")
     final_test_loss, predictions, actual_values = evaluate(model, test_loader, criterion, device, get_predictions=True)
     print(f"Final test loss: {final_test_loss:.6f}")
-    
-    plt.figure(figsize=(10, 6))
-    plt.scatter(actual_values, predictions, alpha=0.7)
-    
-    min_val = min(np.min(actual_values), np.min(predictions))
-    max_val = max(np.max(actual_values), np.max(predictions))
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect prediction')
-    
-    r2 = r2_score(actual_values, predictions)
-    plt.title(f'Comparison of Predicted vs Actual Values (R² = {r2:.4f})')
-    
-    plt.xlabel('Actual Values')
-    plt.ylabel('Predicted Values')
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig('prediction_comparison.png')
-    plt.close()
     
     test_data_with_ids = []
     with torch.no_grad():
@@ -387,7 +337,7 @@ def main():
     plt.plot(full_range, corrected_predictions, 'g--', label='Bias-Corrected Predictions', linewidth=2.5)
     plt.xlabel('Sample Index', fontsize=12)
     plt.ylabel('Value', fontsize=12)
-    plt.title(f'Actual vs Predicted Values (Corrected MAE: {corrected_mae:.4f}, RMSE: {corrected_rmse:.4f})', fontsize=14)
+    plt.title(f'Actual vs Predicted Values (Original and Corrected)', fontsize=14)
     plt.legend(fontsize=12)
     plt.grid(True)
     plt.xlim(0, num_locations-1)
@@ -398,28 +348,26 @@ def main():
         plt.plot([i, i], [full_actuals[i], corrected_predictions[i]], 'g-', alpha=0.2)
     
     plt.tight_layout()
+    plt.savefig('prediction_timeseries_all.png')
+    plt.close()
+    
+    plt.figure(figsize=(16, 8))
+    plt.plot(full_range, full_actuals, 'b-', label='Actual Values', linewidth=2.5)
+    plt.plot(full_range, corrected_predictions, 'g--', label='Corrected Predictions', linewidth=2.5)
+    plt.xlabel('Sample Index', fontsize=12)
+    plt.ylabel('Value', fontsize=12)
+    plt.title(f'Actual vs Corrected Predicted Values (MAE: {corrected_mae:.4f}, RMSE: {corrected_rmse:.4f})', fontsize=14)
+    plt.legend(fontsize=12)
+    plt.grid(True)
+    plt.xlim(0, num_locations-1)
+    plt.xticks(np.arange(0, num_locations, 5))
+    
+    for i in range(num_locations):
+        plt.plot([i, i], [full_actuals[i], corrected_predictions[i]], 'g-', alpha=0.3)
+    
+    plt.tight_layout()
     plt.savefig('prediction_timeseries_corrected.png')
     plt.close()
-    
-    plt.figure(figsize=(10, 6))
-    plt.scatter(full_actuals, corrected_predictions, alpha=0.7, color='green')
-    
-    min_val = min(np.min(full_actuals), np.min(corrected_predictions))
-    max_val = max(np.max(full_actuals), np.max(corrected_predictions))
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect prediction')
-    
-    plt.title(f'Bias-Corrected Predictions vs Actual Values (R² = {corrected_r2:.4f})')
-    plt.xlabel('Actual Values')
-    plt.ylabel('Corrected Predicted Values')
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig('corrected_prediction_comparison.png')
-    plt.close()
-    
-    print("Comparison plots saved with both original and bias-corrected predictions")
-    
-    torch.save(model.state_dict(), 'gnn_model.pt')
     
     bias_correction_info = {
         'bias_value': bias_correction,
@@ -435,11 +383,23 @@ def main():
         }
     }
     
-    with open('bias_correction.pkl', 'wb') as f:
-        import pickle
-        pickle.dump(bias_correction_info, f)
+    data_range = np.max(full_actuals) - np.min(full_actuals)
+    data_mean = np.mean(np.abs(full_actuals))
     
-    print("Model and bias correction info saved")
+    nrmse_range = corrected_rmse / data_range
+    nrmse_mean = corrected_rmse / data_mean
+    nmae_range = corrected_mae / data_range
+    nmae_mean = corrected_mae / data_mean
+
+    with open('gnn_metrics_table_corrected.csv', 'w') as f:
+        f.write("Metric,Corrected Model\n")
+        f.write(f"RMSE,{corrected_rmse:.6f}\n")
+        f.write(f"NRMSE (range),{nrmse_range:.6f}\n")
+        f.write(f"NRMSE (mean),{nrmse_mean:.6f}\n")
+        f.write(f"MAE,{corrected_mae:.6f}\n")
+        f.write(f"NMAE (range),{nmae_range:.6f}\n")
+        f.write(f"NMAE (mean),{nmae_mean:.6f}\n")
+        f.write(f"R^2,{corrected_r2:.6f}\n")
 
 if __name__ == "__main__":
     main() 

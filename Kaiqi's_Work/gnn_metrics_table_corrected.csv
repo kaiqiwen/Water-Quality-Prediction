@@ -1,0 +1,8 @@
+Metric,Corrected Model
+RMSE,0.003357
+NRMSE (range),0.030584
+NRMSE (mean),0.005052
+MAE,0.002209
+NMAE (range),0.020125
+NMAE (mean),0.003325
+R^2,0.975009
